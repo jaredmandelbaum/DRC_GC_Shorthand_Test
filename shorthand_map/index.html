@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DRC Green Corridor Map</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      :root {
+        --bg: #0b0f0a;
+        --text: #f2f3f1;
+        --muted: rgba(242, 243, 241, 0.7);
+        --panel: rgba(11, 15, 10, 0.75);
+        --green: #7fc97f;
+        --red: #e34a33;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+      }
+      #map {
+        height: 100vh;
+        width: 100%;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+      }
+      .story {
+        position: relative;
+        z-index: 2;
+        margin-top: -100vh;
+        pointer-events: none;
+      }
+      .step {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 6vh 6vw;
+      }
+      .step .panel {
+        max-width: 420px;
+        background: var(--panel);
+        backdrop-filter: blur(6px);
+        padding: 18px 20px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        pointer-events: auto;
+      }
+      .panel h1,
+      .panel h2 {
+        margin: 0 0 10px 0;
+        font-weight: 600;
+      }
+      .panel p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .legend {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+        font-size: 0.95rem;
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .swatch {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+      }
+      .swatch.green {
+        background: rgba(127, 201, 127, 0.45);
+      }
+      .swatch.red {
+        background: rgba(227, 74, 51, 0.7);
+      }
+      @media (max-width: 900px) {
+        .step {
+          justify-content: center;
+        }
+        .panel {
+          max-width: 90vw;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div class="story">
+      <section class="step" data-step="0">
+        <div class="panel">
+          <h1>DRC Green Corridor</h1>
+          <p>
+            The green corridor footprint appears over the Democratic Republic of
+            Congo.
+          </p>
+          <div class="legend">
+            <span><span class="swatch green"></span>Green Corridor</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="step" data-step="1">
+        <div class="panel">
+          <h2>Concession Overlap</h2>
+          <p>
+            Selected concession areas appear on top of the corridor.
+          </p>
+          <div class="legend">
+            <span><span class="swatch green"></span>Green Corridor</span>
+            <span><span class="swatch red"></span>Concession Selection</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script>
+      const map = L.map("map", {
+        zoomControl: true,
+        scrollWheelZoom: false,
+        attributionControl: true,
+      }).setView([-2.8, 23.7], 5);
+
+      const imagery = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          maxZoom: 18,
+          attribution: "Tiles © Esri",
+        }
+      ).addTo(map);
+
+      const borders = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+        {
+          maxZoom: 18,
+          attribution: "Borders © Esri",
+        }
+      ).addTo(map);
+
+      const greenStyle = {
+        color: "#7fc97f",
+        weight: 1.2,
+        opacity: 0.8,
+        fillColor: "#7fc97f",
+        fillOpacity: 0.35,
+      };
+
+      const redStyle = {
+        color: "#e34a33",
+        weight: 1.4,
+        opacity: 0.9,
+        fillColor: "#e34a33",
+        fillOpacity: 0.65,
+      };
+
+      let greenLayer;
+      let redLayer;
+
+      Promise.all([
+        fetch("data/green_corridor.geojson").then((r) => r.json()),
+        fetch("data/concessions.geojson").then((r) => r.json()),
+      ])
+        .then(([greenData, redData]) => {
+          greenLayer = L.geoJSON(greenData, { style: greenStyle }).addTo(map);
+          redLayer = L.geoJSON(redData, { style: redStyle }).addTo(map);
+
+          redLayer.setStyle({ fillOpacity: 0, opacity: 0 });
+
+          const bounds = greenLayer.getBounds();
+          if (bounds.isValid()) {
+            map.fitBounds(bounds.pad(0.15));
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load GeoJSON", err);
+        });
+
+      function setStep(step) {
+        if (!greenLayer || !redLayer) return;
+        if (step === 0) {
+          greenLayer.setStyle({ fillOpacity: 0.35, opacity: 0.8 });
+          redLayer.setStyle({ fillOpacity: 0, opacity: 0 });
+        } else {
+          greenLayer.setStyle({ fillOpacity: 0.35, opacity: 0.8 });
+          redLayer.setStyle({ fillOpacity: 0.65, opacity: 0.9 });
+        }
+      }
+
+      const steps = document.querySelectorAll(".step");
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              const step = Number(entry.target.dataset.step || 0);
+              setStep(step);
+            }
+          });
+        },
+        {
+          threshold: 0.6,
+        }
+      );
+
+      steps.forEach((step) => observer.observe(step));
+    </script>
+  </body>
+</html>
